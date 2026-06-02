@@ -2,8 +2,8 @@
 
 Full-stack educational fintech prototype with:
 
-- `FastAPI` backend for auth, sessions, messages, internal EMI tools, PDF extraction, and LLM orchestration
-- `PostgreSQL + SQLAlchemy` persistence
+- `Node.js (Express)` backend for auth, sessions, messages, internal EMI tools, PDF extraction, and LLM orchestration
+- `PostgreSQL + Sequelize` persistence
 - `Next.js` frontend for signup/login, borrower intake, chat, summaries, and PDF upload
 - External `llm-wrapper` integration for grounded explanations
 
@@ -15,7 +15,7 @@ The system is split into two apps:
   - Auth via JWT
   - User-scoped chat sessions and messages
   - Deterministic financial tools for EMI and eligibility
-  - PDF text extraction via PyMuPDF
+  - PDF text extraction via pdf-parse
   - Prompt building and calls to the external LLM wrapper
 - `frontend/`
   - Simple single-screen operator UI
@@ -102,7 +102,7 @@ The backend keeps the wrapper token private and never exposes it to the frontend
 
 Prompt construction now lives in:
 
-- `backend/app/services/prompt_builder.py`
+- `backend/src/services/promptBuilder.js`
 
 Each LLM request follows the explicit component structure:
 
@@ -134,9 +134,9 @@ The `data` section includes only grounded inputs:
 
 This makes prompt tuning easy because the orchestration layer is now split into:
 
-- `prompt_builder.py` for prompt shape
-- `chat_service.py` for intent-based tool orchestration
-- `session_state_service.py` for session state transitions
+- `promptBuilder.js` for prompt shape
+- `chatService.js` for intent-based tool orchestration
+- `sessionStateService.js` for session state transitions
 
 ## Intent And State Handling
 
@@ -201,13 +201,13 @@ Financial calculations must be auditable and repeatable. EMI, total interest, to
 - explainable
 - safe to reuse across conversations
 
-## Why PyMuPDF Is Used
+## Why pdf-parse Is Used
 
-PyMuPDF is a strong fit for this assignment because most salary slips, loan letters, and statements in the prototype scope are text-based PDFs. It extracts embedded text directly without forcing OCR and keeps the implementation lightweight.
+pdf-parse is a strong fit for this assignment because most salary slips, loan letters, and statements in the prototype scope are text-based PDFs. It extracts embedded text directly without forcing OCR and keeps the implementation lightweight.
 
 ## Security Design
 
-- Passwords are hashed with bcrypt through `passlib`.
+- Passwords are hashed with bcrypt through `bcryptjs`.
 - Login returns a signed JWT.
 - All chat APIs require `Authorization: Bearer <jwt>`.
 - Every session and message query is filtered by the authenticated `user_id`.
@@ -231,20 +231,29 @@ Sample business rules include minimum income, maximum amount, tenure bounds, FOI
 
 ### Backend
 
+Requires Node.js 18+ and a running PostgreSQL instance.
+
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install
 cp .env.example .env
-uvicorn app.main:app --reload
+npm start        # or: npm run dev (watch mode)
+```
+
+Run the test suite with:
+
+```bash
+npm test
 ```
 
 The default backend expects PostgreSQL at:
 
 ```bash
-postgresql+psycopg2://postgres:postgres@localhost:5432/fintech_agent
+postgres://postgres:postgres@localhost:5432/fintech_agent
 ```
+
+Tables are created automatically on startup (`sequelize.sync()`), and sample
+loan products are seeded when `SEED_SAMPLE_DATA=true`.
 
 ### Frontend
 
@@ -263,9 +272,9 @@ Backend default:
 
 - `http://localhost:8000`
 
-Swagger docs:
+Health check:
 
-- `http://localhost:8000/docs`
+- `http://localhost:8000/health`
 
 ## LLM Wrapper Configuration
 
