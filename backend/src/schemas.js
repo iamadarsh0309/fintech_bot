@@ -27,9 +27,3 @@ export const sessionCreateSchema = z.object({
 export const messageCreateSchema = z.object({
   message: z.string().min(1).max(4000),
 });
-
-export const emiCalculationSchema = z.object({
-  amount: z.number().gt(0),
-  interest_rate: z.number().gte(0),
-  months: z.number().int().gt(0),
-});

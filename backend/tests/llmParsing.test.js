@@ -81,3 +81,24 @@ test("tryParseJson returns null for non-object JSON", () => {
 test("tryParseJson returns object for object JSON", () => {
   assert.deepEqual(LLMService.tryParseJson('{"answer": "ok"}'), { answer: "ok" });
 });
+
+test("tryParseJson unwraps a ```json fenced block", () => {
+  const fenced = '```json\n{"answer": "hi", "disclaimer": "d"}\n```';
+  assert.deepEqual(LLMService.tryParseJson(fenced), { answer: "hi", disclaimer: "d" });
+});
+
+test("tryParseJson extracts a JSON object embedded in prose", () => {
+  const messy = 'Here you go:\n{"answer": "hi"}\nHope that helps!';
+  assert.deepEqual(LLMService.tryParseJson(messy), { answer: "hi" });
+});
+
+test("parseResponse unwraps a fenced JSON answer from response field", () => {
+  const service = new LLMService();
+  const result = service.parseResponse({
+    response: '```json\n{"answer": "Grounded reply.", "disclaimer": "Subject to underwriting."}\n```',
+    model: "wrapper-v5",
+  });
+  assert.equal(result.answer, "Grounded reply.");
+  assert.equal(result.disclaimer, "Subject to underwriting.");
+  assert.equal(result.model, "wrapper-v5");
+});

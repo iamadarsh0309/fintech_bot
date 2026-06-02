@@ -53,8 +53,8 @@ export function buildChatPrompt({
       `5. Current session intent is ${intent}.\n` +
       `6. Current session state is ${stateSnapshot.stage ?? "UNKNOWN"}.`,
     format:
-      "Return valid JSON with this shape:\n" +
-      '{\n  "answer": "<plain-language response>",\n  "disclaimer": "<short underwriting disclaimer>"\n}',
+      "Return ONLY raw, valid JSON with this exact shape — no markdown fences, no text before or after:\n" +
+      '{\n  "answer": "<3-5 short bullet points, each on its own line starting with \'- \', under 150 words total, no emojis>",\n  "disclaimer": "<short underwriting disclaimer>"\n}',
     audience:
       "The audience is a borrower evaluating lending options who needs clear, concise, and auditable guidance.",
     tone: "Professional, clear, calm, and non-salesy.",

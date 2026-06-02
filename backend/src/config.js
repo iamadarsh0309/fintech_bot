@@ -52,6 +52,5 @@ export const settings = {
   llmWrapperToken: process.env.LLM_WRAPPER_TOKEN || "",
   backendCorsOrigins: parseCorsOrigins(process.env.BACKEND_CORS_ORIGINS),
   seedSampleData: parseBool(process.env.SEED_SAMPLE_DATA, true),
-  exposeDebugEndpoints: parseBool(process.env.EXPOSE_DEBUG_ENDPOINTS, false),
   port: Number(process.env.PORT || 8000),
 };

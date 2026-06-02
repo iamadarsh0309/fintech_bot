@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:postman": "npx --yes newman run ../postman/fintech-advisor.postman_collection.json -e ../postman/fintech-advisor.postman_environment.json"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

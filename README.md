@@ -191,6 +191,8 @@ This prototype reduces hallucination risk through:
    - The model is instructed not to invent interest rates, approval status, or missing facts.
 4. Structured validation
    - The LLM service accepts either JSON-like output or plain text and normalizes it before returning it to the client.
+5. Responsible-AI output guard
+   - Every assistant reply passes through `sanitizeAnswer()` in `backend/src/services/chatService.js`. It neutralizes approval-guarantee / over-promising language (e.g. "guaranteed approval", "pre-approved", "100% approval", "risk-free") into grounded, hedged phrasing, and forces a disclaimer that names both underwriting and verification when the model omits one. This makes "never guarantee approval" a code-enforced invariant, not just a prompt instruction.
 
 ## Why Calculations Stay Outside The LLM
 
@@ -205,14 +207,21 @@ Financial calculations must be auditable and repeatable. EMI, total interest, to
 
 PDF text extraction runs Mozilla's PDF.js inside a headless Chromium page driven by Puppeteer. Most salary slips, loan letters, and statements in the prototype scope are text-based PDFs, so PDF.js extracts the embedded text layer directly without OCR. Running it inside an isolated browser context (rather than the Node process) sandboxes parsing of untrusted uploads; `isEvalSupported: false` is also set as a hardening flag. A single Chromium instance is reused across uploads and torn down on shutdown.
 
-## Security Design
+## Security & Privacy
 
-- Passwords are hashed with bcrypt through `bcryptjs`.
-- Login returns a signed JWT.
-- All chat APIs require `Authorization: Bearer <jwt>`.
-- Every session and message query is filtered by the authenticated `user_id`.
-- User A cannot fetch or post into User B’s sessions.
-- The LLM wrapper token lives only in backend environment variables.
+What the prototype implements today:
+
+- Passwords are hashed with bcrypt through `bcryptjs` (salted, per-user).
+- Login returns a signed JWT; all session/message APIs require `Authorization: Bearer <jwt>`.
+- User-level access control: `authenticate` (in `backend/src/middleware.js`) resolves the JWT subject to a user, and `getUserSessionOr404` filters every session and message query by the authenticated `user_id`. User A cannot read or post into User B's sessions (returns `404`, verified by the Postman suite).
+- The LLM wrapper token lives only in backend environment variables and is never exposed to the frontend.
+
+How this would harden in a real implementation:
+
+- **Data isolation**: enforce row-level scoping at the DB layer (Postgres RLS / per-tenant policies) in addition to the application filter, so a missed `WHERE user_id` clause cannot leak data.
+- **Sensitive-data handling**: encrypt financial profile fields at rest (KMS-managed keys), redact PII from logs and from prompts/metadata sent to the LLM, and set retention/deletion policies for chat history and uploaded documents.
+- **Auth lifecycle**: short-lived access tokens plus refresh tokens, rotation, and revocation; rate limiting and audit logging on auth and advisory endpoints.
+- **Transport & secrets**: TLS everywhere, secrets from a managed vault rather than `.env`.
 
 ## Seeded Loan Products
 
@@ -240,11 +249,24 @@ cp .env.example .env
 npm start        # or: npm run dev (watch mode)
 ```
 
-Run the test suite with:
+Run the unit test suite (pure logic — EMI/eligibility, prompt builder, session
+state, LLM parsing, security) with:
 
 ```bash
 npm test
 ```
+
+Run the API requirement tests (Postman collection, executed with Newman) against
+a running server. Start the backend with `EXPOSE_DEBUG_ENDPOINTS=true` so the EMI
+calculator endpoint is mounted, then:
+
+```bash
+npm run test:postman
+```
+
+The collection lives in `postman/` and is LLM-agnostic, so it passes with the
+deterministic fallback (`LLM_WRAPPER_TOKEN` empty) or a real wrapper token. See
+the Requirements Mapping table below for what each request asserts.
 
 The default backend expects PostgreSQL at:
 
@@ -359,6 +381,23 @@ curl -X POST http://localhost:8000/debug/calculate-emi \
   -H "Content-Type: application/json" \
   -d '{"amount":500000,"interest_rate":11,"months":24}'
 ```
+
+## Requirements Mapping
+
+Each functional/security/responsible-AI requirement maps to a module and an
+automated Postman test (`postman/fintech-advisor.postman_collection.json`).
+
+| Requirement | Where it lives | Postman test |
+| --- | --- | --- |
+| Accept borrower inputs (amount, purpose, income, existing EMI, tenure, employment, risk) | `schemas.js` → `routes/sessions.js` | Create FIND_BEST_LOAN session — asserts every field persists |
+| Recommend products by eligibility rules (6-product catalog) | `services/seed.js`, `findEligibleProducts` | FIND_BEST_LOAN chat — products from catalog; SME excluded for salaried |
+| EMI, total interest, total repayment | `calculateEmi` | EMI calculator correctness (exact values) + chat `emi_calculator` |
+| Shorter vs longer tenure trade-offs | `compareTenureOutlook` | FIND_BEST_LOAN chat — `tool_outputs.tenure_tradeoffs` |
+| Grounded plain-language AI answers | `promptBuilder.js`, `llmService.js`, `chatService.js` | FIND_BEST_LOAN chat — grounded reply + eligible products echoed |
+| Disclaimer (underwriting + verification) | `DEFAULT_DISCLAIMER`, `sanitizeAnswer` | chat tests — disclaimer names underwriting + verification |
+| Never guarantee approval (responsible AI) | `sanitizeAnswer` | chat test — no banned approval-guarantee phrases in answer |
+| Per-user data isolation | `middleware.js` (`authenticate`, `getUserSessionOr404`) | User B cannot read User A's session (404) |
+| Multi-turn product comparison (bonus) | `COMPARE_LOANS` branch in `chatService.js` | COMPARE_LOANS chat — `loan_comparisons[].emi_scenario` |
 
 ## Test Cases To Demo
 

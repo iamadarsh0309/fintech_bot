@@ -15,6 +15,16 @@ test("calculateEmi returns positive values", () => {
   assert.ok(result.total_repayment > 500000);
 });
 
+test("calculateEmi is exact for a known scenario (pure function, no endpoint)", () => {
+  // EMI is a pure function only — it is intentionally not exposed as an API.
+  const result = calculateEmi(500000, 11, 24);
+  assert.deepEqual(result, {
+    emi: 23303.92,
+    total_interest: 59294.06,
+    total_repayment: 559294.06,
+  });
+});
+
 test("calculateFoir computes the ratio", () => {
   assert.equal(calculateFoir(100000, 20000), 20.0);
 });

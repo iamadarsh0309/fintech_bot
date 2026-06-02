@@ -104,15 +104,36 @@ export class LLMService {
   }
 
   static tryParseJson(value) {
-    let parsed;
-    try {
-      parsed = JSON.parse(value);
-    } catch {
+    if (typeof value !== "string") {
       return null;
     }
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed
-      : null;
+
+    const trimmed = value.trim();
+    const candidates = [trimmed];
+
+    // Models often wrap JSON in a ```json ... ``` markdown fence; unwrap it.
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenced) {
+      candidates.push(fenced[1].trim());
+    }
+
+    // Fall back to the first {...} object embedded in surrounding prose.
+    const firstObject = trimmed.match(/\{[\s\S]*\}/);
+    if (firstObject) {
+      candidates.push(firstObject[0]);
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch {
+        // try the next candidate
+      }
+    }
+    return null;
   }
 
   static fallbackResponse() {

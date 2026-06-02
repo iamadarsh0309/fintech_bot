@@ -6,7 +6,6 @@ import { settings } from "./config.js";
 import { HttpError } from "./errors.js";
 import { authRouter } from "./routes/auth.js";
 import { sessionsRouter } from "./routes/sessions.js";
-import { toolsRouter } from "./routes/tools.js";
 
 export function createApp() {
   const app = express();
@@ -25,9 +24,6 @@ export function createApp() {
 
   app.use(authRouter);
   app.use("/sessions", sessionsRouter);
-  if (settings.exposeDebugEndpoints) {
-    app.use(toolsRouter);
-  }
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {

@@ -1,0 +1,459 @@
+{
+  "info": {
+    "name": "AI Loan Advisor — Requirement Tests",
+    "description": "API tests mapped to the Fintech Lending AI assignment. Each request asserts a functional, security, or responsible-AI requirement. Run against the backend with EXPOSE_DEBUG_ENDPOINTS=true (for the EMI calculator test). Assertions are LLM-agnostic, so they pass with the deterministic fallback (LLM_WRAPPER_TOKEN empty) or a real wrapper token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('username')) {",
+          "  const ts = Date.now();",
+          "  pm.collectionVariables.set('username', 'adv_' + ts);",
+          "  pm.collectionVariables.set('usernameB', 'advb_' + ts);",
+          "  pm.collectionVariables.set('password', 'supersecret1');",
+          "}",
+          "pm.collectionVariables.set('catalog', JSON.stringify(['Personal Loan','Salary Advance','BNPL','SME Loan','Secured Loan','Top Up Loan']));",
+          "pm.collectionVariables.set('banned', JSON.stringify(['guaranteed approval','pre-approved','preapproved','100% approval','assured approval','instant approval','you are approved',\"you're approved\",'risk-free','no rejection']));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "username", "value": "" },
+    { "key": "usernameB", "value": "" },
+    { "key": "password", "value": "" },
+    { "key": "token", "value": "" },
+    { "key": "tokenB", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "sessionCompareId", "value": "" },
+    { "key": "catalog", "value": "" },
+    { "key": "banned", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth §5 — Signup (201)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('created (201)', () => pm.response.to.have.status(201));",
+              "pm.test('returns id + username, no password hash', () => {",
+              "  const b = pm.response.json();",
+              "  pm.expect(b.username).to.eql(pm.collectionVariables.get('username'));",
+              "  pm.expect(b).to.have.property('id');",
+              "  pm.expect(b).to.not.have.property('password_hash');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth §5 — Duplicate signup (409)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('conflict (409)', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth §5 — Login wrong password (401)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"wrong-{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('unauthorized (401)', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth §5 — Login (200, save token)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ok (200)', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('returns bearer token', () => {",
+              "  pm.expect(b.token_type).to.eql('bearer');",
+              "  pm.expect(b.access_token).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.collectionVariables.set('token', b.access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security §5 — Sessions require auth (401)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/sessions", "host": ["{{baseUrl}}"], "path": ["sessions"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('unauthenticated request rejected (401)', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inputs §4.1 — Create FIND_BEST_LOAN session",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/sessions", "host": ["{{baseUrl}}"], "path": ["sessions"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Personal loan planning\",\n  \"intent\": \"FIND_BEST_LOAN\",\n  \"loan_amount\": 500000,\n  \"loan_purpose\": \"Personal loan\",\n  \"monthly_income\": 90000,\n  \"employment_type\": \"salaried\",\n  \"existing_monthly_emi\": 15000,\n  \"preferred_tenure_months\": 24,\n  \"risk_profile\": \"balanced\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('created (201)', () => pm.response.to.have.status(201));",
+              "const s = pm.response.json();",
+              "pm.test('all borrower inputs persisted', () => {",
+              "  pm.expect(s.intent).to.eql('FIND_BEST_LOAN');",
+              "  pm.expect(Number(s.loan_amount)).to.eql(500000);",
+              "  pm.expect(s.loan_purpose).to.eql('Personal loan');",
+              "  pm.expect(Number(s.monthly_income)).to.eql(90000);",
+              "  pm.expect(s.employment_type).to.eql('salaried');",
+              "  pm.expect(Number(s.existing_monthly_emi)).to.eql(15000);",
+              "  pm.expect(Number(s.preferred_tenure_months)).to.eql(24);",
+              "  pm.expect(s.risk_profile).to.eql('balanced');",
+              "});",
+              "pm.test('profile-captured state', () => {",
+              "  pm.expect(s.status).to.eql('PROFILE_CAPTURED');",
+              "  pm.expect(s.state_snapshot.stage).to.eql('PROFILE_CAPTURED');",
+              "});",
+              "pm.collectionVariables.set('sessionId', s.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inputs §4.1 — Create COMPARE_LOANS session",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/sessions", "host": ["{{baseUrl}}"], "path": ["sessions"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"intent\": \"COMPARE_LOANS\",\n  \"loan_amount\": 500000,\n  \"loan_purpose\": \"Debt consolidation\",\n  \"monthly_income\": 90000,\n  \"employment_type\": \"salaried\",\n  \"existing_monthly_emi\": 15000,\n  \"preferred_tenure_months\": 24,\n  \"risk_profile\": \"balanced\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('created (201)', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('sessionCompareId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat §4.2/4.4/4.5/4.6 — FIND_BEST_LOAN advice",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/messages", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}", "messages"] },
+        "body": { "mode": "raw", "raw": "{\n  \"message\": \"Which loan is the best and most suitable option for me?\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "const catalog = JSON.parse(pm.collectionVariables.get('catalog'));",
+              "pm.test('§4.2 recommends products from the mock catalog', () => {",
+              "  pm.expect(r.eligible_products).to.be.an('array').that.is.not.empty;",
+              "  r.eligible_products.forEach(p => pm.expect(catalog).to.include(p.name));",
+              "});",
+              "pm.test('§4.2 eligibility rules applied — SME excluded for salaried', () => {",
+              "  const names = r.eligible_products.map(p => p.name);",
+              "  pm.expect(names).to.not.include('SME Loan');",
+              "});",
+              "pm.test('§4.3 EMI / interest / repayment computed', () => {",
+              "  const emi = r.tool_outputs.emi_calculator;",
+              "  pm.expect(emi, 'emi_calculator present').to.be.an('object');",
+              "  pm.expect(emi.emi).to.be.above(0);",
+              "  pm.expect(emi.total_interest).to.be.above(0);",
+              "  pm.expect(emi.total_repayment).to.be.above(emi.emi);",
+              "  pm.expect(emi.total_repayment).to.be.closeTo(emi.emi * 24, 1);",
+              "});",
+              "pm.test('§4.4 tenure trade-offs explained', () => {",
+              "  const t = r.tool_outputs.tenure_tradeoffs;",
+              "  pm.expect(t).to.be.an('object');",
+              "  pm.expect(t.tenure_note).to.be.a('string').and.not.empty;",
+              "  pm.expect(t.risk_note).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.test('§4.5 grounded plain-language assistant reply', () => {",
+              "  pm.expect(r.assistant_message.message).to.be.a('string').and.not.empty;",
+              "  pm.expect(r.session).to.be.an('object');",
+              "});",
+              "pm.test('§4.6 disclaimer names underwriting + verification', () => {",
+              "  const d = (r.disclaimer || '').toLowerCase();",
+              "  pm.expect(d).to.include('underwriting');",
+              "  pm.expect(d).to.include('verif');",
+              "});",
+              "pm.test('§3/§7 no approval-guarantee language in answer', () => {",
+              "  const banned = JSON.parse(pm.collectionVariables.get('banned'));",
+              "  const ans = r.assistant_message.message.toLowerCase();",
+              "  const hits = banned.filter(b => ans.includes(b));",
+              "  pm.expect(hits, 'banned phrases: ' + hits.join(', ')).to.be.empty;",
+              "});",
+              "pm.test('§3/§7 answer is synthesized — bullets, no emojis, under 150 words', () => {",
+              "  const ans = r.assistant_message.message;",
+              "  const lines = ans.split('\\n');",
+              "  lines.forEach(line => pm.expect(line, 'each line is a bullet').to.match(/^- \\S/));",
+              "  const emoji = /[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{FE0F}]/u;",
+              "  pm.expect(emoji.test(ans), 'no emojis').to.be.false;",
+              "  const words = (ans.match(/[A-Za-z0-9']+/g) || []).length;",
+              "  pm.expect(words, 'under 150 words').to.be.below(150);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Responsible AI §4 — Off-topic question redirects to 'Please change intent.'",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/messages", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}", "messages"] },
+        "body": { "mode": "raw", "raw": "{\n  \"message\": \"Can you help me invest in mutual funds and stocks?\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('returns the fixed redirect message', () => {",
+              "  pm.expect(r.assistant_message.message).to.eql('Please change intent.');",
+              "});",
+              "pm.test('intent guard skipped the LLM', () => {",
+              "  pm.expect(r.assistant_message.metadata.llm_model).to.eql('intent-guard');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat Bonus §8 — COMPARE_LOANS multi-product comparison",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/sessions/{{sessionCompareId}}/messages", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionCompareId}}", "messages"] },
+        "body": { "mode": "raw", "raw": "{\n  \"message\": \"Compare my best options side by side.\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('loan_comparisons provided with EMI scenarios', () => {",
+              "  const c = r.tool_outputs.loan_comparisons;",
+              "  pm.expect(c).to.be.an('array').that.is.not.empty;",
+              "  c.forEach(item => {",
+              "    pm.expect(item).to.have.property('product_name');",
+              "    pm.expect(item).to.have.property('interest_rate');",
+              "    pm.expect(item.emi_scenario.emi).to.be.above(0);",
+              "    pm.expect(item.emi_scenario.total_interest).to.be.above(0);",
+              "    pm.expect(item.emi_scenario.total_repayment).to.be.above(0);",
+              "  });",
+              "});",
+              "pm.test('disclaimer present', () => {",
+              "  pm.expect((r.disclaimer || '').toLowerCase()).to.include('underwriting');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Summary §6 — Generate consultation summary",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/summary", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}", "summary"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('summary persisted for this session', () => {",
+              "  pm.expect(r.session_id).to.eql(pm.collectionVariables.get('sessionId'));",
+              "  pm.expect(r.summary).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security §5 — Signup second user (B)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{usernameB}}\",\n  \"password\": \"{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('created (201)', () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security §5 — Login user B (save token)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{usernameB}}\",\n  \"password\": \"{{password}}\"\n}" }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ok (200)', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security §5 — User B cannot read User A's session (404)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{tokenB}}" }],
+        "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cross-user access denied (404)', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
