@@ -160,6 +160,58 @@ const OFF_TOPIC_TERMS = [
   "demat",
 ];
 
+// Broad lending vocabulary. A substantive message that contains none of these
+// is treated as off-topic (this also catches typos like "myutual funds" that a
+// fixed off-topic list would miss).
+const LENDING_VOCAB = [
+  "loan",
+  "emi",
+  "installment",
+  "instalment",
+  "interest",
+  "tenure",
+  "repay",
+  "repayment",
+  "principal",
+  "eligib",
+  "qualify",
+  "income",
+  "salary",
+  "borrow",
+  "credit",
+  "financ",
+  "finance",
+  "foir",
+  "collateral",
+  "secured",
+  "unsecured",
+  "bnpl",
+  "advance",
+  "top-up",
+  "topup",
+  "top up",
+  "product",
+  "rate",
+  "amount",
+  "afford",
+  "debt",
+  "fee",
+  "document",
+  "pdf",
+  "statement",
+  "upload",
+  "lender",
+  "underwriting",
+  "approval",
+  "compare",
+  "option",
+  "best",
+  "suitable",
+  "recommend",
+  "personal",
+  "sme",
+];
+
 const INTENT_KEYWORDS = {
   [SessionIntent.EMI_CALCULATION]: [
     "emi",
@@ -216,8 +268,19 @@ export function detectRequestedIntent(message, sessionIntent) {
   }
 
   const scores = {};
+  let totalIntentScore = 0;
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
     scores[intent] = keywords.filter((kw) => text.includes(kw)).length;
+    totalIntentScore += scores[intent];
+  }
+
+  // A substantive message with zero lending vocabulary (and no intent signal)
+  // is off-topic — catches typos like "myutual funds" a fixed list would miss.
+  const wordCount = (text.match(/[a-z0-9']+/g) || []).length;
+  const mentionsLending =
+    totalIntentScore > 0 || LENDING_VOCAB.some((term) => text.includes(term));
+  if (wordCount >= 3 && !mentionsLending) {
+    return "OFF_TOPIC";
   }
 
   const sessionScore = scores[sessionIntent] || 0;

@@ -73,6 +73,18 @@ test("off-topic message is flagged as a different intent", () => {
   );
 });
 
+test("off-topic message with a typo is still flagged (no lending vocab)", () => {
+  // The real screenshot used the typo "myutual funds".
+  assert.equal(
+    detectRequestedIntent("help me understand myutual funds", SessionIntent.EMI_CALCULATION),
+    "OFF_TOPIC",
+  );
+  assert.equal(
+    detectRequestedIntent("tell me about cricket scores", SessionIntent.FIND_BEST_LOAN),
+    "OFF_TOPIC",
+  );
+});
+
 test("a clearly different loan intent is flagged", () => {
   // "compare ... versus" in a FIND_BEST_LOAN session -> COMPARE_LOANS
   assert.equal(

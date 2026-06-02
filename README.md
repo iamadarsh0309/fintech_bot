@@ -191,8 +191,15 @@ This prototype reduces hallucination risk through:
    - The model is instructed not to invent interest rates, approval status, or missing facts.
 4. Structured validation
    - The LLM service accepts either JSON-like output or plain text and normalizes it before returning it to the client.
-5. Responsible-AI output guard
-   - Every assistant reply passes through `sanitizeAnswer()` in `backend/src/services/chatService.js`. It neutralizes approval-guarantee / over-promising language (e.g. "guaranteed approval", "pre-approved", "100% approval", "risk-free") into grounded, hedged phrasing, and forces a disclaimer that names both underwriting and verification when the model omits one. This makes "never guarantee approval" a code-enforced invariant, not just a prompt instruction.
+5. Responsible-AI output guard (`synthesizeAnswer()` in `backend/src/services/chatService.js`)
+   - Every LLM-generated assistant reply is synthesized before it is returned — raw model text is never sent to the client. The guard:
+     - neutralizes approval-guarantee / over-promising language (e.g. "guaranteed approval", "pre-approved", "100% approval", "risk-free") into grounded, hedged phrasing;
+     - strips emojis;
+     - reformats the answer into bullet points and trims it to under 150 words;
+     - forces a disclaimer naming both underwriting and verification when the model omits one.
+   - This makes "never guarantee approval", concise bullet output, and a compliant disclaimer code-enforced invariants, not just prompt instructions.
+6. Intent guard (`detectRequestedIntent()`)
+   - Each session is created with a single intent. If a message targets a different loan intent, or is off-topic for lending (detected via keywords plus a lending-vocabulary check that also catches typos), the advisor short-circuits the LLM and replies exactly `Please change intent.`
 
 ## Why Calculations Stay Outside The LLM
 
@@ -257,8 +264,7 @@ npm test
 ```
 
 Run the API requirement tests (Postman collection, executed with Newman) against
-a running server. Start the backend with `EXPOSE_DEBUG_ENDPOINTS=true` so the EMI
-calculator endpoint is mounted, then:
+a running server:
 
 ```bash
 npm run test:postman
@@ -372,32 +378,31 @@ curl -X POST http://localhost:8000/sessions/SESSION_ID/messages \
   -d '{"message":"Can I reduce my EMI without stretching the tenure too much?"}'
 ```
 
-### Debug EMI Tool
-
-This endpoint is disabled by default and only mounted when `EXPOSE_DEBUG_ENDPOINTS=true`.
-
-```bash
-curl -X POST http://localhost:8000/debug/calculate-emi \
-  -H "Content-Type: application/json" \
-  -d '{"amount":500000,"interest_rate":11,"months":24}'
-```
+> Note: the EMI calculator is a **pure function** (`calculateEmi` in
+> `backend/src/services/recommendationService.js`), intentionally **not** exposed
+> as an HTTP endpoint. It runs inside the deterministic tool layer and its output
+> is surfaced in chat replies under `tool_outputs.emi_calculator`. It is covered
+> by unit tests (exact values) rather than an API.
 
 ## Requirements Mapping
 
 Each functional/security/responsible-AI requirement maps to a module and an
 automated Postman test (`postman/fintech-advisor.postman_collection.json`).
 
-| Requirement | Where it lives | Postman test |
+| Requirement | Where it lives | Test |
 | --- | --- | --- |
-| Accept borrower inputs (amount, purpose, income, existing EMI, tenure, employment, risk) | `schemas.js` → `routes/sessions.js` | Create FIND_BEST_LOAN session — asserts every field persists |
-| Recommend products by eligibility rules (6-product catalog) | `services/seed.js`, `findEligibleProducts` | FIND_BEST_LOAN chat — products from catalog; SME excluded for salaried |
-| EMI, total interest, total repayment | `calculateEmi` | EMI calculator correctness (exact values) + chat `emi_calculator` |
-| Shorter vs longer tenure trade-offs | `compareTenureOutlook` | FIND_BEST_LOAN chat — `tool_outputs.tenure_tradeoffs` |
-| Grounded plain-language AI answers | `promptBuilder.js`, `llmService.js`, `chatService.js` | FIND_BEST_LOAN chat — grounded reply + eligible products echoed |
-| Disclaimer (underwriting + verification) | `DEFAULT_DISCLAIMER`, `sanitizeAnswer` | chat tests — disclaimer names underwriting + verification |
-| Never guarantee approval (responsible AI) | `sanitizeAnswer` | chat test — no banned approval-guarantee phrases in answer |
-| Per-user data isolation | `middleware.js` (`authenticate`, `getUserSessionOr404`) | User B cannot read User A's session (404) |
-| Multi-turn product comparison (bonus) | `COMPARE_LOANS` branch in `chatService.js` | COMPARE_LOANS chat — `loan_comparisons[].emi_scenario` |
+| Accept borrower inputs (amount, purpose, income, existing EMI, tenure, employment, risk) | `schemas.js` → `routes/sessions.js` | Postman: create FIND_BEST_LOAN session — every field persists |
+| Recommend products by eligibility rules (6-product catalog) | `services/seed.js`, `findEligibleProducts` | Postman: FIND_BEST_LOAN chat — products from catalog; SME excluded for salaried |
+| EMI, total interest, total repayment (pure function, no API) | `calculateEmi` | Unit: `financialTools.test.js` (exact values) + Postman chat `emi_calculator` |
+| Shorter vs longer tenure trade-offs | `compareTenureOutlook` | Postman: FIND_BEST_LOAN chat — `tool_outputs.tenure_tradeoffs` |
+| Grounded plain-language AI answers | `promptBuilder.js`, `llmService.js`, `chatService.js` | Postman: FIND_BEST_LOAN chat — grounded reply + eligible products echoed |
+| Synthesized output: bullets, no emojis, < 150 words | `synthesizeAnswer` | Unit: `responsibleAi.test.js`, `conversationFlows.test.js`; Postman chat format test |
+| Disclaimer (underwriting + verification) | `DEFAULT_DISCLAIMER`, `synthesizeAnswer` | Unit + Postman: disclaimer names underwriting + verification |
+| Never guarantee approval (responsible AI) | `synthesizeAnswer` | Unit + Postman: no banned approval-guarantee phrases |
+| Redirect off-topic / different intent → "Please change intent." | `detectRequestedIntent` | Unit: `responsibleAi.test.js`; Postman: off-topic redirect |
+| Per-user data isolation | `middleware.js` (`authenticate`, `getUserSessionOr404`) | Postman: User B cannot read User A's session (404) |
+| Multi-turn conversations (> 10 messages per intent) | `chatService.js` | Unit: `conversationFlows.test.js` (12 turns × 5 intents) |
+| Multi-turn product comparison (bonus) | `COMPARE_LOANS` branch in `chatService.js` | Postman: COMPARE_LOANS chat — `loan_comparisons[].emi_scenario` |
 
 ## Test Cases To Demo
 

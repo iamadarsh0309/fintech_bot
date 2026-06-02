@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "AI Loan Advisor — Requirement Tests",
-    "description": "API tests mapped to the Fintech Lending AI assignment. Each request asserts a functional, security, or responsible-AI requirement. Run against the backend with EXPOSE_DEBUG_ENDPOINTS=true (for the EMI calculator test). Assertions are LLM-agnostic, so they pass with the deterministic fallback (LLM_WRAPPER_TOKEN empty) or a real wrapper token.",
+    "description": "API tests mapped to the Fintech Lending AI assignment. Each request asserts a functional, security, or responsible-AI requirement. Assertions are LLM-agnostic, so they pass with the deterministic fallback (LLM_WRAPPER_TOKEN empty) or a real wrapper token. Requests run top-to-bottom (login and session IDs are saved into collection variables).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
