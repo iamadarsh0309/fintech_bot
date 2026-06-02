@@ -15,7 +15,7 @@ The system is split into two apps:
   - Auth via JWT
   - User-scoped chat sessions and messages
   - Deterministic financial tools for EMI and eligibility
-  - PDF text extraction via pdf-parse
+  - PDF text extraction via Puppeteer + PDF.js (headless Chromium)
   - Prompt building and calls to the external LLM wrapper
 - `frontend/`
   - Simple single-screen operator UI
@@ -201,9 +201,9 @@ Financial calculations must be auditable and repeatable. EMI, total interest, to
 - explainable
 - safe to reuse across conversations
 
-## Why pdf-parse Is Used
+## Why Puppeteer + PDF.js Is Used
 
-pdf-parse is a strong fit for this assignment because most salary slips, loan letters, and statements in the prototype scope are text-based PDFs. It extracts embedded text directly without forcing OCR and keeps the implementation lightweight.
+PDF text extraction runs Mozilla's PDF.js inside a headless Chromium page driven by Puppeteer. Most salary slips, loan letters, and statements in the prototype scope are text-based PDFs, so PDF.js extracts the embedded text layer directly without OCR. Running it inside an isolated browser context (rather than the Node process) sandboxes parsing of untrusted uploads; `isEvalSupported: false` is also set as a hardening flag. A single Chromium instance is reused across uploads and torn down on shutdown.
 
 ## Security Design
 
