@@ -313,25 +313,17 @@ export function ChatApp() {
     setError("");
   }
 
-  return (
-    <main className="shell">
-      <section className="hero">
-        <div className="badge-row">
-          <span className="badge">JWT auth + user-scoped sessions</span>
-          <span className="badge">Deterministic EMI + eligibility tools</span>
-          <span className="badge">LLM wrapper orchestration</span>
-        </div>
-        <h1>Responsible loan advice, grounded before it speaks.</h1>
-        <p>
-          This prototype collects borrower context, runs deterministic financial tools,
-          then asks the external LLM wrapper to explain recommendations in plain language
-          without inventing rates, approvals, or calculations.
-        </p>
-      </section>
+  // Auth gate: until the user signs in, show ONLY the login/signup card.
+  if (!token) {
+    return (
+      <main className="shell">
+        <section className="hero">
+          <h1>AI Loan Advisor</h1>
+          <p>Sign in to start a grounded loan advisory session.</p>
+        </section>
 
-      <section className="dashboard">
-        <aside className="stack">
-          <div className="panel">
+        <section className="dashboard" style={{ justifyContent: "center" }}>
+          <div className="panel" style={{ width: "100%", maxWidth: 420 }}>
             <div className="panel-inner stack">
               <h2 className="section-title">Authentication</h2>
               <div className="tab-row">
@@ -351,50 +343,56 @@ export function ChatApp() {
                 </button>
               </div>
               <form className="stack" onSubmit={handleAuthSubmit}>
-                <div className="field-grid">
-                  <div className="field">
-                    <label htmlFor="username">Username</label>
-                    <input
-                      id="username"
-                      onChange={(event) =>
-                        setAuthForm((current) => ({
-                          ...current,
-                          username: event.target.value,
-                        }))
-                      }
-                      value={authForm.username}
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="password">Password</label>
-                    <input
-                      id="password"
-                      onChange={(event) =>
-                        setAuthForm((current) => ({
-                          ...current,
-                          password: event.target.value,
-                        }))
-                      }
-                      type="password"
-                      value={authForm.password}
-                    />
-                  </div>
+                <div className="field">
+                  <label htmlFor="username">Username</label>
+                  <input
+                    id="username"
+                    onChange={(event) =>
+                      setAuthForm((current) => ({ ...current, username: event.target.value }))
+                    }
+                    value={authForm.username}
+                  />
                 </div>
-                <div className="button-row">
-                  <button className="button button-primary" disabled={busyKey === "auth"} type="submit">
-                    {authMode === "signup" ? "Create account" : "Sign in"}
-                  </button>
-                  {token ? (
-                    <button className="button button-secondary" onClick={logout} type="button">
-                      Sign out
-                    </button>
-                  ) : null}
+                <div className="field">
+                  <label htmlFor="password">Password</label>
+                  <input
+                    id="password"
+                    onChange={(event) =>
+                      setAuthForm((current) => ({ ...current, password: event.target.value }))
+                    }
+                    type="password"
+                    value={authForm.password}
+                  />
                 </div>
-                {username ? <div className="success">Signed in as {username}.</div> : null}
+                <button className="button button-primary" disabled={busyKey === "auth"} type="submit">
+                  {authMode === "signup" ? "Create account" : "Sign in"}
+                </button>
+                {error ? <div className="notice">{error}</div> : null}
+                {status ? <div className="success">{status}</div> : null}
               </form>
             </div>
           </div>
+        </section>
+      </main>
+    );
+  }
 
+  return (
+    <main className="shell">
+      <section className="hero">
+        <div className="button-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h1 style={{ margin: 0 }}>AI Loan Advisor</h1>
+          <div className="button-row" style={{ alignItems: "center" }}>
+            <span className="badge">Signed in as {username}</span>
+            <button className="button button-secondary" onClick={logout} type="button">
+              Sign out
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard">
+        <aside className="stack">
           <div className="panel">
             <div className="panel-inner stack">
               <h2 className="section-title">New Loan Advice</h2>
